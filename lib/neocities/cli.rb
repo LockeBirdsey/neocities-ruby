@@ -7,7 +7,7 @@ require File.join(File.dirname(__FILE__), 'client')
 
 module Neocities
   class CLI
-    SUBCOMMANDS = %w{upload delete list info push logout pizza}
+    SUBCOMMANDS = %w{upload delete list info push logout pizza users}
     HELP_SUBCOMMANDS = ['-h', '--help', 'help']
     PENELOPE_MOUTHS = %w{^ o ~ - v U}
     PENELOPE_EYES = %w{o ~ O}
@@ -47,7 +47,8 @@ module Neocities
 
       if !@api_key
         begin
-          @api_key = File.read @app_config_path
+          #@api_key = File.read 
+          @api_key = File.open(@app_config_path) {|f| f.readline}
         rescue Errno::ENOENT
           @api_key = nil
         end
@@ -121,6 +122,106 @@ module Neocities
       puts TTY::Table.new(out).to_s
       exit
     end
+
+    def users
+      if @subargs.delete('-s') == '-s' || @subargs.delete('--switch') == '-switch'
+        @switching = true
+      elsif @subargs.delete('-a') == '-a' || @subargs.delete('--add') == '-add'
+        @adding = true
+      elsif @subargs.delete('-r') == '-r' || @subargs.delete('--remove') == '--remove'
+        @removing = true
+      elsif @subargs.delete('-ls') == '-ls' || @subargs.delete('--list') == '--list'
+        @listing = true
+      end
+
+      username = @subargs[0]
+
+      if @adding
+        existing_file = []
+        File.foreach(@app_config_path ) do |line|
+          existing_file.append(line)
+          if line == username
+            puts "user already exists"
+            @redunant = true
+          end
+        end
+        if !@redunant
+          puts "Please login to get your API key:"
+
+          if !@sitename && !@password
+            @sitename = @prompt.ask('sitename:', default: ENV['NEOCITIES_SITENAME'])
+            @password = @prompt.mask('password:', default: ENV['NEOCITIES_PASSWORD'])
+          end
+
+          @client = Neocities::Client.new sitename: @sitename, password: @password
+
+          resp = @client.key
+          if resp[:api_key]
+            FileUtils.mkdir_p Pathname(@app_config_path).dirname
+            key = @sitename + " " + resp[:api_key]
+            File.open(@app_config_path, "a") {|f| f.puts(key)}
+            puts "The api key for #{@pastel.bold @sitename} has been stored in #{@pastel.bold @app_config_path}."
+          else
+            display_response resp
+            exit
+          end
+        end
+      end
+
+      if @removing
+        keyfile = []
+        File.foreach(@app_config_path).with_index do |line, line_num|
+          if line_num == 0      
+            @currkey = "#{line}".strip()
+            next
+          end
+          if line.split(' ')[0] != username
+            keyfile.append(line)
+          else
+            @deadkey = "#{line}".split(' ')[1].strip()
+            if @deadkey == @currkey
+              @currkey = ""
+            end
+          end
+        end
+        keyfile.prepend(@currkey)
+        File.open(@app_config_path, "w") do |f|
+          f.puts(keyfile)
+        end      
+      end
+
+      if @switching
+        keyfile = []
+        File.foreach(@app_config_path).with_index do |line, line_num|
+          if line_num == 0      
+            next 
+          end
+          if line.split(' ')[0].strip() == username
+            @default = "#{line}".split(' ')[1].strip()
+          end
+          keyfile.append(line)
+        end
+        if @default == nil
+          puts "user not found"
+        else
+          keyfile.prepend(@default)
+          File.open(@app_config_path, "w") do |f|
+            f.puts(keyfile)
+          end
+        end
+      end
+
+      if @listing
+        File.foreach(@app_config_path).with_index do |line, line_num|
+          if line_num == 0
+            next 
+          end
+          puts "#{line}".split(' ')[0].strip()
+        end
+      end
+    end
+
+
 
     def list
       if @subargs.delete('-d') == '-d'
