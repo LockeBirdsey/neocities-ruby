@@ -49,6 +49,8 @@ module Neocities
         begin
           #@api_key = File.read 
           @api_key = File.open(@app_config_path) {|f| f.readline}
+          @api_key = @api_key.strip()
+          puts @api_key
         rescue Errno::ENOENT
           @api_key = nil
         end
